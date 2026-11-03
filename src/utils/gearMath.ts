@@ -14,7 +14,7 @@ export const SPUR_64P_OUTER_DIAMETERS_MM: Record<number, number> = {
 };
 
 export const PINION_DIAMETER_OFFSET_MM = 0.2;
-export const GEAR_MESH_CLEARANCE_MM = 0.1;
+export const GEAR_MESH_CLEARANCE_MM = 0.2;
 
 /**
  * Returns the pitch diameter (mm) of the pinion gear for a given tooth count and pitch,
