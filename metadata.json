@@ -1,0 +1,6 @@
+{
+  "name": "Gear Ratio & Rollout Calculator",
+  "description": "Calculate gear ratios, tire rollout, top speed, and chassis/axle clearance for slot cars and RC models with an interactive 2D involute gear simulator and comparison matrix.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
