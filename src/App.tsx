@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Box, Layers } from 'lucide-react';
 import { Header } from './components/Header';
 import { GearVisualizer } from './components/GearVisualizer';
+import { SlotCar3DVisualizer } from './components/SlotCar3DVisualizer';
 import { GearControls } from './components/GearControls';
 import { MetricsDisplay } from './components/MetricsDisplay';
 import { TireDiameterImpact } from './components/TireDiameterImpact';
@@ -11,8 +13,11 @@ import { Language, translations } from './i18n/translations';
 
 export default function App() {
   // Language state: 'en' (English, default) or 'fi' (Finnish)
-  const [lang, setLang] = useState<Language>('en');
+  const [lang, setLang] = useState<Language>('fi');
   const t = translations[lang];
+
+  // 2D / 3D visualizer display mode
+  const [simDisplayMode, setSimDisplayMode] = useState<'both' | '2d' | '3d'>('both');
 
   // Theme state
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -84,9 +89,15 @@ export default function App() {
   const handleUpdateSetup = (updated: Partial<GearSetup>) => {
     setSetup((prev) => {
       const next = { ...prev, ...updated };
-      // 2.0mm shaft for 64p pinions, 1.5mm shaft for 72p and 80p pinions
+      // 2.0mm shaft for 64p, 1.5mm or 2.0mm for 72p, 1.5mm for 80p
       if (updated.pitch !== undefined && updated.pinionShaftDiaMm === undefined) {
-        next.pinionShaftDiaMm = updated.pitch === 64 ? 2.0 : 1.5;
+        if (updated.pitch === 64) {
+          next.pinionShaftDiaMm = 2.0;
+        } else if (updated.pitch === 72) {
+          next.pinionShaftDiaMm = prev.pinionShaftDiaMm === 2.0 ? 2.0 : 1.5;
+        } else {
+          next.pinionShaftDiaMm = 1.5;
+        }
       }
       return next;
     });
@@ -96,13 +107,18 @@ export default function App() {
   const handleSelectPreset = (presetId: string) => {
     const preset = PRESETS.find((p) => p.id === presetId);
     if (preset) {
-      setSetup((prev) => ({
-        ...prev,
-        pinionTeeth: preset.pinionTeeth,
-        gearTeeth: preset.gearTeeth,
-        tireDiameterMm: preset.tireDiameterMm,
-        motorRpm: preset.motorRpm,
-      }));
+      setSetup((prev) => {
+        const nextPitch = preset.pitch ?? prev.pitch ?? 72;
+        return {
+          ...prev,
+          pinionTeeth: preset.pinionTeeth,
+          gearTeeth: preset.gearTeeth,
+          tireDiameterMm: preset.tireDiameterMm,
+          motorRpm: preset.motorRpm,
+          pitch: nextPitch,
+          pinionShaftDiaMm: nextPitch === 64 ? 2.0 : 1.5,
+        };
+      });
     }
   };
 
@@ -137,10 +153,15 @@ export default function App() {
         activeSection={activeSection}
         onSelectSection={(id) => {
           setActiveSection(id);
-          const el = document.getElementById(id);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth' });
+          if (id === 'model-3d' && simDisplayMode === '2d') {
+            setSimDisplayMode('both');
           }
+          setTimeout(() => {
+            const el = document.getElementById(id);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth' });
+            }
+          }, 20);
         }}
       />
 
@@ -174,18 +195,71 @@ export default function App() {
         {/* Section 1: Interactive Simulation & Primary Controls (2-Zone Sandbox Layout) */}
         <section id="simulator" className="space-y-6 scroll-mt-20">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left Zone: 2D Interactive Stage (7 Cols) */}
+            {/* Left Zone: 2D & 3D Interactive Stage (7 Cols) */}
             <div className="lg:col-span-7 space-y-4">
-              <GearVisualizer
-                setup={setup}
-                metrics={metrics}
-                lang={lang}
-                onChangePitch={(pitch) => handleUpdateSetup({ pitch })}
-                onChangeAxleSize={(axleSize) => handleUpdateSetup({ axleSize })}
-                onChangeMotorOffset={(motorOffsetMm) => handleUpdateSetup({ motorOffsetMm })}
-                onChangeMeshClearance={(gearMeshClearanceMm) => handleUpdateSetup({ gearMeshClearanceMm })}
-                onToggleLockAxleHeight={(lockAxleHeight86) => handleUpdateSetup({ lockAxleHeight86 })}
-              />
+              {/* 2D / 3D Mode Switcher Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 shadow-xs">
+                <div className="flex items-center gap-1.5 px-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+                  <Layers className="w-4 h-4 text-amber-500" />
+                  <span>{lang === 'fi' ? 'Visualisointitila:' : 'Visualization Mode:'}</span>
+                </div>
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setSimDisplayMode('both')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                      simDisplayMode === 'both'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {t.viewModeBoth}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSimDisplayMode('2d')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                      simDisplayMode === '2d'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    {t.viewMode2D}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSimDisplayMode('3d')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                      simDisplayMode === '3d'
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                        : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Box className="w-3.5 h-3.5" />
+                    <span>{t.viewMode3D}</span>
+                  </button>
+                </div>
+              </div>
+
+              {(simDisplayMode === 'both' || simDisplayMode === '2d') && (
+                <GearVisualizer
+                  setup={setup}
+                  metrics={metrics}
+                  lang={lang}
+                  onChangePitch={(pitch) => handleUpdateSetup({ pitch })}
+                  onChangeAxleSize={(axleSize) => handleUpdateSetup({ axleSize })}
+                  onChangeMotorOffset={(motorOffsetMm) => handleUpdateSetup({ motorOffsetMm })}
+                  onChangeMeshClearance={(gearMeshClearanceMm) => handleUpdateSetup({ gearMeshClearanceMm })}
+                  onToggleLockAxleHeight={(lockAxleHeight86) => handleUpdateSetup({ lockAxleHeight86 })}
+                  onChangePinionShaftDia={(pinionShaftDiaMm) => handleUpdateSetup({ pinionShaftDiaMm })}
+                />
+              )}
+
+              {(simDisplayMode === 'both' || simDisplayMode === '3d') && (
+                <div id="model-3d" className="scroll-mt-20">
+                  <SlotCar3DVisualizer setup={setup} metrics={metrics} lang={lang} />
+                </div>
+              )}
             </div>
 
             {/* Right Zone: Controls & Parameters Deck (5 Cols) */}

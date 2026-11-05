@@ -13,7 +13,7 @@ export interface GearSetup {
   motorRpm: number;          // Moottorin kierrosluku (rpm)
   pitch?: GearPitch;         // Hammasjako (Diametral Pitch: 64P, 72P, 80P)
   axleSize?: AxleSize;       // Spurrin akselin paksuus: '3/32' (2.381 mm) tai '2mm' (2.000 mm)
-  pinionShaftDiaMm?: number; // Pinjonin akselin halkaisija (mm, oletus 1.5 mm)
+  pinionShaftDiaMm?: number; // Pinjonin akselin halkaisija (mm, 1.5 mm tai 2.0 mm; tukee 72p 2mm pinjoneita)
   motorDiameterMm?: number;  // Moottorin halkaisija millimetreinä (13.5 mm – 14.5 mm, oletus 14.0 mm)
   motorOffsetMm?: number;    // Moottorin pystysuuntainen offset spurin akselin alapuolelle (mm, oletus 0.0 mm)
   gearMeshClearanceMm?: number; // Ratasvälys / Gear mesh clearance millimetreinä (oletus 0.10 mm)
@@ -43,6 +43,7 @@ export interface PresetProfile {
   gearTeeth: number;
   tireDiameterMm: number;
   motorRpm: number;
+  pitch?: GearPitch;
   isFromUserCsv?: boolean;
 }
 

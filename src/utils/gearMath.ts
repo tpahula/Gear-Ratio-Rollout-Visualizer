@@ -14,24 +14,35 @@ export const SPUR_64P_OUTER_DIAMETERS_MM: Record<number, number> = {
 };
 
 export const PINION_DIAMETER_OFFSET_MM = 0.2;
+export const PINION_64P_EXTRA_DIAMETER_OFFSET_MM = 0.15;
 export const GEAR_MESH_CLEARANCE_MM = 0.2;
 
 /**
+ * Returns the diameter offset (mm) for a pinion of the given pitch:
+ * +0.35 mm (0.20 + 0.15 mm) for 64P pinions, and +0.20 mm for 72P and 80P pinions.
+ */
+export function getPinionDiameterOffsetMm(pitch: GearPitch = 72): number {
+  return pitch === 64
+    ? PINION_DIAMETER_OFFSET_MM + PINION_64P_EXTRA_DIAMETER_OFFSET_MM
+    : PINION_DIAMETER_OFFSET_MM;
+}
+
+/**
  * Returns the pitch diameter (mm) of the pinion gear for a given tooth count and pitch,
- * including the +0.2 mm diameter increase for all pinions.
+ * including the pitch-specific diameter increase (+0.35 mm for 64P, +0.20 mm for 72P/80P).
  */
 export function getPinionPitchDiameterMm(pinionTeeth: number, pitch: GearPitch = 72): number {
   const moduleMm = 25.4 / pitch;
-  return pinionTeeth * moduleMm + PINION_DIAMETER_OFFSET_MM;
+  return pinionTeeth * moduleMm + getPinionDiameterOffsetMm(pitch);
 }
 
 /**
  * Returns the outer diameter (OD in mm) of the pinion gear for a given tooth count and pitch,
- * including the +0.2 mm diameter increase for all pinions.
+ * including the pitch-specific diameter increase (+0.35 mm for 64P, +0.20 mm for 72P/80P).
  */
 export function getPinionOuterDiameterMm(pinionTeeth: number, pitch: GearPitch = 72): number {
   const moduleMm = 25.4 / pitch;
-  return (pinionTeeth + 2) * moduleMm + PINION_DIAMETER_OFFSET_MM;
+  return (pinionTeeth + 2) * moduleMm + getPinionDiameterOffsetMm(pitch);
 }
 
 /**
@@ -94,24 +105,26 @@ export function calculateGearMetrics(setup: GearSetup): CalculationResult {
 export const PRESETS: PresetProfile[] = [
   {
     id: 'user-csv-1',
-    name: 'CSV Column 1 Setup (16.5 mm)',
+    name: 'ES-24 & ES-32',
     category: 'User CSV',
-    description: 'Pinion: 5, Gear: 40, Tire: 16.5 mm → Rollout: 6.47625 mm',
+    description: 'Pinion: 5, Gear: 40, Pitch: 72P, Tire: 16.5 mm → Rollout: 6.47625 mm',
     pinionTeeth: 5,
     gearTeeth: 40,
     tireDiameterMm: 16.5,
     motorRpm: 20000,
+    pitch: 72,
     isFromUserCsv: true,
   },
   {
     id: 'user-csv-3',
-    name: 'CSV Column 3 Setup (8T / 35T)',
+    name: 'PR-24',
     category: 'User CSV',
-    description: 'Pinion: 8, Gear: 35, Tire: 16.5 mm → Rollout: 11.84229 mm (tall gearing)',
+    description: 'Pinion: 8, Gear: 35, Pitch: 64P, Tire: 16.5 mm → Rollout: 11.84229 mm',
     pinionTeeth: 8,
     gearTeeth: 35,
     tireDiameterMm: 16.5,
     motorRpm: 20000,
+    pitch: 64,
     isFromUserCsv: true,
   },
   {

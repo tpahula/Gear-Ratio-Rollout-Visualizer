@@ -19,6 +19,7 @@ interface GearVisualizerProps {
   onChangeMotorOffset?: (motorOffsetMm: number) => void;
   onChangeMeshClearance?: (gearMeshClearanceMm: number) => void;
   onToggleLockAxleHeight?: (locked: boolean) => void;
+  onChangePinionShaftDia?: (pinionShaftDiaMm: number) => void;
 }
 
 export const GearVisualizer: React.FC<GearVisualizerProps> = ({
@@ -30,6 +31,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
   onChangeMotorOffset,
   onChangeMeshClearance,
   onToggleLockAxleHeight,
+  onChangePinionShaftDia,
 }) => {
   const t = translations[lang];
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
@@ -72,8 +74,8 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
     const meshClearanceMm = gearMeshClearanceMm;
     const centerDistanceMm = (pinionPitchDiaMm + spurPitchDiaMm) / 2 + meshClearanceMm;
 
-    // Pinion Motor Shaft: strictly 2.0 mm for 64P, 1.5 mm for 72P and 80P
-    const pinionShaftDiaMm = pitch === 64 ? 2.0 : 1.5;
+    // Pinion Motor Shaft: 2.0 mm for 64P, 1.5 mm or 2.0 mm for 72P, 1.5 mm for 80P
+    const pinionShaftDiaMm = setup.pinionShaftDiaMm ?? (pitch === 64 ? 2.0 : 1.5);
     const pinionShaftRadiusMm = pinionShaftDiaMm / 2;
     const ref2mmPinionShaftRadiusMm = 1.0;
 
@@ -145,7 +147,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
     // Spur gear & wheel axle is anchored at (gearX, gearY);
     // Pinion shifts along the pitch circle arc by offsetAngleRad at centerDistancePx (r1 + r2 + meshClearancePx)
     // with 0.10 mm mesh clearance centered at (meshX, meshY) while placing the motor below the spur axle.
-    const gearX = 500;
+    const gearX = 485;
     const gearY = 205;
     const meshX = gearX - (r2 + meshClearancePx / 2) * Math.cos(offsetAngleRad);
     const meshY = gearY + (r2 + meshClearancePx / 2) * Math.sin(offsetAngleRad);
@@ -357,8 +359,31 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
               >
                 <span className="flex items-center gap-1">
                   <span>{p}P</span>
-                  <span className="text-[9px] font-normal opacity-75">({p === 64 ? '2.0' : '1.5'}mm)</span>
+                  <span className="text-[9px] font-normal opacity-75">
+                    ({p === 64 ? '2.0' : p === 72 ? `${geometry.pinionShaftDiaMm.toFixed(1)}` : '1.5'}mm)
+                  </span>
                 </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Pinion Shaft diameter selector (1.5mm vs 2.0mm) */}
+          <div className="flex items-center gap-1 p-0.5 bg-slate-800/90 border border-slate-700/80 rounded-lg text-xs font-mono">
+            <span className="px-2 text-[10px] font-sans font-semibold text-slate-400 hidden sm:inline">
+              {t.visPinionShaftHeaderLabel}
+            </span>
+            {([1.5, 2.0] as const).map((dia) => (
+              <button
+                key={dia}
+                onClick={() => onChangePinionShaftDia?.(dia)}
+                className={`px-2 py-1 rounded-md font-bold transition-colors ${
+                  geometry.pinionShaftDiaMm === dia
+                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                }`}
+                title={`Pinion motor shaft Ø ${dia.toFixed(1)} mm`}
+              >
+                Ø{dia.toFixed(1)}
               </button>
             ))}
           </div>
@@ -550,6 +575,82 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
         </div>
       </div>
 
+      {/* Dedicated Top Telemetry Banner (outside SVG so it never obscures diagram labels) */}
+      <div className="px-4 py-2 bg-slate-950/95 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900 border border-sky-500/30 text-[11px] font-mono text-sky-300 shadow-xs">
+            {t.visPitchInfo
+              .replace('{pitch}', pitch.toString())
+              .replace('{mod}', geometry.moduleMm.toFixed(3))
+              .replace('{center}', geometry.centerDistanceMm.toFixed(2))
+              .replace('{mesh}', geometry.meshClearanceMm.toFixed(2))}
+          </span>
+
+          {/* Pinion OD & Spur OD Diameter Telemetry Badge */}
+          <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900 border border-amber-500/40 text-[11px] font-mono text-amber-300 font-semibold shadow-xs">
+            {t.visDiametersBadge
+              .replace('{pinionOd}', geometry.pinionOuterDiaMm.toFixed(2))
+              .replace('{spurOd}', geometry.spurOuterDiaMm.toFixed(2))}
+          </span>
+
+          {/* Axle top surface -> Spur outer diameter badge (shows < 8.59mm breach only for 3/32" axle) */}
+          <span
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono shadow-xs border ${
+              geometry.isUnder86Mm
+                ? 'bg-rose-950 border-rose-500 text-rose-200 font-extrabold'
+                : 'bg-slate-900 border-emerald-500/30 text-emerald-300 font-semibold'
+            }`}
+          >
+            {geometry.isUnder86Mm
+              ? t.visAxleTopToOuterWarn.replace('{dist}', geometry.axleTopToSpurOuterMm.toFixed(2))
+              : t.visAxleTopToOuterOk
+                  .replace('{dist}', geometry.axleTopToSpurOuterMm.toFixed(2))
+                  .replace('{radial}', geometry.axleRadialWallMm.toFixed(2))}
+          </span>
+
+          <span
+            className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono shadow-xs border ${
+              geometry.spurGroundClearanceMm > 0.2
+                ? 'bg-slate-900 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-950 border-rose-500/50 text-rose-300 font-bold'
+            }`}
+          >
+            {geometry.spurGroundClearanceMm >= 0
+              ? t.visClearanceOk.replace('{clearance}', geometry.spurGroundClearanceMm.toFixed(2))
+              : t.visClearanceWarn.replace('{clearance}', Math.abs(geometry.spurGroundClearanceMm).toFixed(2))}
+          </span>
+
+          {/* Motor-to-Axle gap telemetry badge */}
+          <span
+            className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono shadow-xs border ${
+              geometry.motorToAxleGapMm > 0.1
+                ? 'bg-slate-900 border-violet-500/40 text-violet-300 font-semibold'
+                : 'bg-rose-950 border-rose-500 text-rose-200 font-extrabold'
+            }`}
+          >
+            {t.visMotorToAxleGap.replace(
+              '{gap}',
+              `${geometry.motorToAxleGapMm >= 0 ? '+' : ''}${geometry.motorToAxleGapMm.toFixed(2)}`
+            )}
+          </span>
+
+          {geometry.clampedOffsetMm > 0.001 && (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900 border border-fuchsia-500/40 text-[11px] font-mono text-fuchsia-300 font-semibold shadow-xs">
+              {t.visMotorOffsetTopBadge.replace('{offset}', geometry.clampedOffsetMm.toFixed(2))}
+            </span>
+          )}
+
+          {lockAxleHeight86 && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-950 border border-amber-500/60 text-[11px] font-mono text-amber-300 font-bold shadow-xs">
+              <Lock className="w-3 h-3" />
+              {t.visAxleLocked86Badge
+                .replace('{val}', lockedChassisMm.toFixed(2))
+                .replace('{ref}', t.visAxleLocked86TopShort)}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* SVG Canvas Stage */}
       <div className="relative w-full aspect-[16/9] min-h-[380px] max-h-[540px] bg-slate-950 flex items-center justify-center select-none overflow-hidden cursor-grab active:cursor-grabbing">
         {/* Engineering Grid Backdrop */}
@@ -560,82 +661,6 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
             backgroundSize: '24px 24px',
           }}
         />
-
-        {/* Floating Pitch & Axle Distance Telemetry Banner */}
-        <div className="absolute top-3 left-4 right-4 z-10 flex flex-wrap items-center justify-end gap-2 pointer-events-none">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900/90 border border-sky-500/30 text-[11px] font-mono text-sky-300 backdrop-blur-xs shadow-md">
-              {t.visPitchInfo
-                .replace('{pitch}', pitch.toString())
-                .replace('{mod}', geometry.moduleMm.toFixed(3))
-                .replace('{center}', geometry.centerDistanceMm.toFixed(2))
-                .replace('{mesh}', geometry.meshClearanceMm.toFixed(2))}
-            </span>
-
-            {/* Pinion OD & Spur OD Diameter Telemetry Badge */}
-            <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900/90 border border-amber-500/40 text-[11px] font-mono text-amber-300 font-semibold backdrop-blur-xs shadow-md">
-              {t.visDiametersBadge
-                .replace('{pinionOd}', geometry.pinionOuterDiaMm.toFixed(2))
-                .replace('{spurOd}', geometry.spurOuterDiaMm.toFixed(2))}
-            </span>
-
-            {/* Axle top surface -> Spur outer diameter badge (shows < 8.59mm breach only for 3/32" axle) */}
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono backdrop-blur-xs shadow-md border ${
-                geometry.isUnder86Mm
-                  ? 'bg-rose-950/95 border-rose-500 text-rose-200 font-extrabold'
-                  : 'bg-slate-900/90 border-emerald-500/30 text-emerald-300 font-semibold'
-              }`}
-            >
-              {geometry.isUnder86Mm
-                ? t.visAxleTopToOuterWarn.replace('{dist}', geometry.axleTopToSpurOuterMm.toFixed(2))
-                : t.visAxleTopToOuterOk
-                    .replace('{dist}', geometry.axleTopToSpurOuterMm.toFixed(2))
-                    .replace('{radial}', geometry.axleRadialWallMm.toFixed(2))}
-            </span>
-
-            <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono backdrop-blur-xs shadow-md border ${
-                geometry.spurGroundClearanceMm > 0.2
-                  ? 'bg-slate-900/90 border-emerald-500/30 text-emerald-300'
-                  : 'bg-rose-950/90 border-rose-500/50 text-rose-300 font-bold'
-              }`}
-            >
-              {geometry.spurGroundClearanceMm >= 0
-                ? t.visClearanceOk.replace('{clearance}', geometry.spurGroundClearanceMm.toFixed(2))
-                : t.visClearanceWarn.replace('{clearance}', Math.abs(geometry.spurGroundClearanceMm).toFixed(2))}
-            </span>
-
-            {/* Motor-to-Axle gap telemetry badge */}
-            <span
-              className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-mono backdrop-blur-xs shadow-md border ${
-                geometry.motorToAxleGapMm > 0.1
-                  ? 'bg-slate-900/90 border-violet-500/40 text-violet-300 font-semibold'
-                  : 'bg-rose-950/95 border-rose-500 text-rose-200 font-extrabold'
-              }`}
-            >
-              {t.visMotorToAxleGap.replace(
-                '{gap}',
-                `${geometry.motorToAxleGapMm >= 0 ? '+' : ''}${geometry.motorToAxleGapMm.toFixed(2)}`
-              )}
-            </span>
-
-            {geometry.clampedOffsetMm > 0.001 && (
-              <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-900/90 border border-fuchsia-500/40 text-[11px] font-mono text-fuchsia-300 font-semibold backdrop-blur-xs shadow-md">
-                {t.visMotorOffsetTopBadge.replace('{offset}', geometry.clampedOffsetMm.toFixed(2))}
-              </span>
-            )}
-
-            {lockAxleHeight86 && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-950/90 border border-amber-500/60 text-[11px] font-mono text-amber-300 font-bold backdrop-blur-xs shadow-md">
-                <Lock className="w-3 h-3" />
-                {t.visAxleLocked86Badge
-                  .replace('{val}', lockedChassisMm.toFixed(2))
-                  .replace('{ref}', t.visAxleLocked86TopShort)}
-              </span>
-            )}
-          </div>
-        </div>
 
         <svg
           viewBox={
@@ -740,7 +765,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                 );
               })}
 
-              {/* Rollout measurement bracket under wheel contact */}
+              {/* Rollout measurement bracket under wheel contact (placed on right side of contact point with dark pill background) */}
               <g transform={`translate(${geometry.gearX}, ${geometry.roadY + 10})`}>
                 <circle cx="0" cy="-10" r="3.5" fill="#f59e0b" />
                 <path
@@ -749,17 +774,30 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                   stroke="#f59e0b"
                   strokeWidth="1.5"
                 />
-                <text
-                  x={Math.min(90, Math.max(15, (rolloutMm * 6) / 2))}
-                  y="22"
-                  fill="#f59e0b"
-                  fontSize="11"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  fontFamily="sans-serif"
-                >
-                  {t.visRolloutBracket.replace('{rollout}', rolloutMm.toFixed(3))}
-                </text>
+                <g transform="translate(112, 26)">
+                  <rect
+                    x="-106"
+                    y="-11"
+                    width="212"
+                    height="20"
+                    rx="5"
+                    fill="#090d16"
+                    fillOpacity="0.96"
+                    stroke="#f59e0b"
+                    strokeWidth="1.2"
+                  />
+                  <text
+                    x="0"
+                    y="3"
+                    fill="#fbbf24"
+                    fontSize="10"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    fontFamily="monospace"
+                  >
+                    {t.visRolloutBracket.replace('{rollout}', rolloutMm.toFixed(3))}
+                  </text>
+                </g>
               </g>
             </g>
           )}
@@ -841,7 +879,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
             (() => {
               const plateThicknessPx = 1.4 * geometry.pxPerMm;
               const plateTopY = geometry.chassisBottomY - plateThicknessPx;
-              const chassisLeftX = Math.max(45, geometry.pinionX - geometry.motorVisualRadius - 26);
+              const chassisLeftX = 25;
               const spurSlotLeftX = geometry.gearX - geometry.gearTipRadius - 5;
               const spurSlotRightX = geometry.gearX + geometry.gearTipRadius + 5;
               const chassisRightX = spurSlotRightX + 26;
@@ -900,34 +938,6 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                     strokeWidth="2.2"
                     strokeDasharray="6 3"
                   />
-
-                  {/* Chassis Label Badge on the chassis plate */}
-                  {viewMode !== 'axle' && (
-                    <g transform={`translate(${(chassisLeftX + spurSlotLeftX) / 2}, ${plateTopY + plateThicknessPx / 2})`}>
-                      <rect
-                        x="-92"
-                        y="-9"
-                        width="184"
-                        height="18"
-                        rx="4"
-                        fill="#0f172a"
-                        fillOpacity="0.92"
-                        stroke="#f59e0b"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x="0"
-                        y="3.5"
-                        textAnchor="middle"
-                        fill="#fde68a"
-                        fontSize="8.5"
-                        fontWeight="bold"
-                        fontFamily="monospace"
-                      >
-                        {t.visChassisLabel.replace('{dist}', geometry.axleTopToChassisBottomMm.toFixed(2))}
-                      </text>
-                    </g>
-                  )}
                 </g>
               );
             })()}
@@ -984,33 +994,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
 
                 return (
                   <g className="motor-dimension-overlay">
-                    {/* Motor top label badge */}
-                    <g transform={`translate(0, ${-geometry.motorVisualRadius - 16})`}>
-                      <rect
-                        x="-68"
-                        y="-14"
-                        width="136"
-                        height="22"
-                        rx="5"
-                        fill="#0f172a"
-                        stroke="#8b5cf6"
-                        strokeWidth="1.2"
-                        opacity="0.95"
-                      />
-                      <text
-                        x="0"
-                        y="1"
-                        textAnchor="middle"
-                        fill="#c4b5fd"
-                        fontSize="10"
-                        fontWeight="bold"
-                        fontFamily="monospace"
-                      >
-                        {t.visMotorCanLabel.replace('{dia}', motorDiameterMm.toFixed(1))}
-                      </text>
-                    </g>
-
-                    {/* Motor vertical Offset visual callout when motor is placed below spur axle (clampedOffsetMm > 0) */}
+                    {/* Motor vertical Offset caliper lines when motor is placed below spur axle (badge is rendered in Topmost Foreground Layer) */}
                     {geometry.clampedOffsetMm > 0.001 && (
                       <g className="motor-offset-overlay">
                         {/* Reference horizontal centerline of Spur Axle (at y = -geometry.offsetPx in motor local coords) */}
@@ -1061,31 +1045,6 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                           stroke="#e879f9"
                           strokeWidth="1.8"
                         />
-                        {/* Motor Offset Badge */}
-                        <g transform={`translate(${calX - 156}, ${-geometry.offsetPx / 2})`}>
-                          <rect
-                            x="0"
-                            y="-11"
-                            width="148"
-                            height="22"
-                            rx="5"
-                            fill="#0f172a"
-                            stroke="#e879f9"
-                            strokeWidth="1.3"
-                            opacity="0.95"
-                          />
-                          <text
-                            x="74"
-                            y="3.5"
-                            textAnchor="middle"
-                            fill="#f5d0fe"
-                            fontSize="9"
-                            fontWeight="bold"
-                            fontFamily="monospace"
-                          >
-                            Offset: -{geometry.clampedOffsetMm.toFixed(2)} mm
-                          </text>
-                        </g>
                       </g>
                     )}
 
@@ -1139,53 +1098,15 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                       strokeWidth="1.8"
                     />
 
-                    {/* Motor Ground Clearance Badge */}
-                    <g transform={`translate(${calX - 156}, ${clearMidY})`}>
-                      <rect
-                        x="0"
-                        y="-18"
-                        width="148"
-                        height="36"
-                        rx="6"
-                        fill={mBg}
-                        stroke={mColor}
-                        strokeWidth="1.4"
-                        opacity="0.95"
-                      />
-                      <text
-                        x="8"
-                        y="-3"
-                        fill={mText}
-                        fontSize="9.5"
-                        fontWeight="bold"
-                        fontFamily="monospace"
-                      >
-                        {t.visMotorClearanceCallout.replace(
-                          '{clearance}',
-                          `${mSign}${geometry.motorGroundClearanceMm.toFixed(2)}`
-                        )}
-                      </text>
-                      <text
-                        x="8"
-                        y="11"
-                        fill="#94a3b8"
-                        fontSize="8.5"
-                        fontFamily="sans-serif"
-                      >
-                        {lockAxleHeight86
-                          ? t.visMotorClearanceLockedSub
-                              .replace('{val}', lockedChassisMm.toFixed(1))
-                              .replace('{motor}', motorDiameterMm.toFixed(1))
-                          : geometry.clampedOffsetMm > 0.001
-                          ? t.visMotorClearanceSubOffset
-                              .replace('{tire}', tireDiameterMm.toFixed(1))
-                              .replace('{motor}', motorDiameterMm.toFixed(1))
-                              .replace('{offset}', geometry.clampedOffsetMm.toFixed(1))
-                          : t.visMotorClearanceSub
-                              .replace('{tire}', tireDiameterMm.toFixed(1))
-                              .replace('{motor}', motorDiameterMm.toFixed(1))}
-                      </text>
-                    </g>
+                    {/* Horizontal connector from caliper line to Motor Ground Clearance Badge */}
+                    <line
+                      x1={calX}
+                      y1={clearMidY}
+                      x2={calX + 12}
+                      y2={clearMidY}
+                      stroke={mColor}
+                      strokeWidth="1.4"
+                    />
                   </g>
                 );
               })()}
@@ -1332,28 +1253,32 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
 
                     {/* Spur Gear Outer Diameter (OD) Dimension Badge (Upper Right) */}
                     {(() => {
-                      const spurOdBadgeY = -Math.max(84, geometry.gearTipRadius * 0.62);
+                      const rightBadgeX = Math.min(
+                        geometry.gearTipRadius + 32,
+                        852 - geometry.gearX - 186
+                      );
+                      const spurOdBadgeY = -Math.max(92, geometry.gearTipRadius * 0.64);
                       return (
                         <g>
                           <line
                             x1={geometry.gearTipRadius + 30}
                             y1={spurOdBadgeY}
-                            x2={geometry.gearTipRadius + 34}
+                            x2={rightBadgeX}
                             y2={spurOdBadgeY}
                             stroke="#38bdf8"
                             strokeWidth="1.4"
                           />
-                          <g transform={`translate(${geometry.gearTipRadius + 34}, ${spurOdBadgeY})`}>
+                          <g transform={`translate(${rightBadgeX}, ${spurOdBadgeY})`}>
                             <rect
                               x="0"
                               y="-18"
-                              width="162"
+                              width="186"
                               height="36"
                               rx="6"
-                              fill="#0f172a"
+                              fill="#090d16"
                               stroke="#38bdf8"
                               strokeWidth="1.4"
-                              opacity="0.96"
+                              fillOpacity="0.97"
                             />
                             <text
                               x="8"
@@ -1444,42 +1369,50 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                     />
 
                     {/* Dimension Badge (Akselin yläpinta -> Rattaan ulkohalkaisija) */}
-                    <g
-                      transform={`translate(${geometry.gearTipRadius + 34}, ${
+                    {(() => {
+                      const rightBadgeX = Math.min(
+                        geometry.gearTipRadius + 32,
+                        852 - geometry.gearX - 186
+                      );
+                      const axleToSpurBadgeY = Math.max(
+                        24,
                         (geometry.gearTipRadius - geometry.axleVisualRadius) / 2
-                      })`}
-                    >
-                      <rect
-                        x="0"
-                        y="-18"
-                        width="148"
-                        height="36"
-                        rx="6"
-                        fill={geometry.isUnder86Mm ? '#4c0519' : '#0f172a'}
-                        stroke={geometry.isUnder86Mm ? '#f43f5e' : '#10b981'}
-                        strokeWidth="1.4"
-                        opacity="0.95"
-                      />
-                      <text
-                        x="8"
-                        y="-3"
-                        fill={geometry.isUnder86Mm ? '#fda4af' : '#6ee7b7'}
-                        fontSize="10"
-                        fontWeight="bold"
-                        fontFamily="monospace"
-                      >
-                        {geometry.axleTopToSpurOuterMm.toFixed(2)} mm ({lang === 'fi' ? 'Runkoon' : 'Chassis'}: {geometry.spurToChassisBottomMm >= 0 ? '+' : ''}{geometry.spurToChassisBottomMm.toFixed(2)})
-                      </text>
-                      <text
-                        x="8"
-                        y="11"
-                        fill="#94a3b8"
-                        fontSize="8.5"
-                        fontFamily="sans-serif"
-                      >
-                        {axleSize === '3/32' ? '3/32" (2.38mm)' : '2mm'} · R−r: {geometry.axleRadialWallMm.toFixed(2)}mm
-                      </text>
-                    </g>
+                      );
+                      return (
+                        <g transform={`translate(${rightBadgeX}, ${axleToSpurBadgeY})`}>
+                          <rect
+                            x="0"
+                            y="-18"
+                            width="186"
+                            height="36"
+                            rx="6"
+                            fill={geometry.isUnder86Mm ? '#4c0519' : '#090d16'}
+                            stroke={geometry.isUnder86Mm ? '#f43f5e' : '#10b981'}
+                            strokeWidth="1.4"
+                            fillOpacity="0.97"
+                          />
+                          <text
+                            x="8"
+                            y="-3"
+                            fill={geometry.isUnder86Mm ? '#fda4af' : '#6ee7b7'}
+                            fontSize="9.5"
+                            fontWeight="bold"
+                            fontFamily="monospace"
+                          >
+                            {geometry.axleTopToSpurOuterMm.toFixed(2)} mm ({lang === 'fi' ? 'Runkoon' : 'Chassis'}: {geometry.spurToChassisBottomMm >= 0 ? '+' : ''}{geometry.spurToChassisBottomMm.toFixed(2)})
+                          </text>
+                          <text
+                            x="8"
+                            y="11"
+                            fill="#94a3b8"
+                            fontSize="8.5"
+                            fontFamily="sans-serif"
+                          >
+                            {axleSize === '3/32' ? '3/32" (2.38mm)' : '2mm'} · R−r: {geometry.axleRadialWallMm.toFixed(2)}mm
+                          </text>
+                        </g>
+                      );
+                    })()}
 
                     {/* Dimension Callout 2: Chassis 8.60 mm Lock (Axle Top Surface -> Chassis Bottom Surface) & Ground Clearance (Spur -> Road) */}
                     {(() => {
@@ -1487,11 +1420,15 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                       const clearanceColor = isLowClearance ? '#f43f5e' : '#38bdf8';
                       const clearanceDashColor = isLowClearance ? '#fb7185' : '#7dd3fc';
                       const clearanceTextColor = isLowClearance ? '#fda4af' : '#7dd3fc';
-                      const clearanceBgColor = isLowClearance ? '#4c0519' : '#0f172a';
+                      const clearanceBgColor = isLowClearance ? '#4c0519' : '#090d16';
                       const clearanceSign = geometry.spurGroundClearanceMm >= 0 ? '+' : '';
                       const chassisClearanceSign = geometry.chassisGroundClearanceMm >= 0 ? '+' : '';
                       const groundLocalY = geometry.groundDistancePx;
                       const chassisLocalY = geometry.chassisBottomPx;
+                      const rightBadgeX = Math.min(
+                        geometry.gearTipRadius + 32,
+                        852 - geometry.gearX - 186
+                      );
                       const midY = Math.max(
                         geometry.gearTipRadius + 24,
                         (geometry.gearTipRadius + groundLocalY) / 2
@@ -1558,20 +1495,20 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                               stroke="#f59e0b"
                               strokeWidth="1.8"
                             />
-                            <g transform={`translate(${geometry.gearTipRadius + 34}, ${-geometry.axleVisualRadius - 24})`}>
+                            <g transform={`translate(${rightBadgeX}, ${-geometry.axleVisualRadius - 24})`}>
                               <rect
                                 x="0"
                                 y="-11"
-                                width="176"
+                                width="186"
                                 height="22"
                                 rx="5"
                                 fill="#451a03"
                                 stroke="#f59e0b"
-                                strokeWidth="1.3"
-                                opacity="0.95"
+                                strokeWidth="1.4"
+                                fillOpacity="0.97"
                               />
                               <text
-                                x="88"
+                                x="93"
                                 y="3.5"
                                 textAnchor="middle"
                                 fill="#fde68a"
@@ -1635,24 +1572,24 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                           <line
                             x1={geometry.gearTipRadius + 24}
                             y1={(geometry.gearTipRadius + groundLocalY) / 2}
-                            x2={geometry.gearTipRadius + 34}
+                            x2={rightBadgeX}
                             y2={midY}
                             stroke={clearanceColor}
                             strokeWidth="1.2"
                           />
 
                           {/* Ground Clearance Dimension Badge (Maavara) */}
-                          <g transform={`translate(${geometry.gearTipRadius + 34}, ${midY})`}>
+                          <g transform={`translate(${rightBadgeX}, ${midY})`}>
                             <rect
                               x="0"
                               y="-18"
-                              width="162"
+                              width="186"
                               height="36"
                               rx="6"
                               fill={clearanceBgColor}
                               stroke={clearanceColor}
                               strokeWidth="1.4"
-                              opacity="0.95"
+                              fillOpacity="0.97"
                             />
                             <text
                               x="8"
@@ -1683,49 +1620,102 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                       );
                     })()}
 
-                    {/* Extra close-up labels in 'axle' view mode */}
+                    {/* Extra close-up labels in 'axle' view mode (all protected by dark pill backgrounds) */}
                     {viewMode === 'axle' && (
                       <g>
-                        <text
-                          x="8"
-                          y={-geometry.axleVisualRadius - 5}
-                          fill="#f8fafc"
-                          fontSize="9"
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
-                        >
-                          {t.visAxleTopSurfaceCallout} (r = {geometry.axleRadiusMm.toFixed(2)} mm)
-                        </text>
-                        <text
-                          x="8"
-                          y={geometry.chassisBottomPx - 5}
-                          fill="#fbbf24"
-                          fontSize="9"
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
-                        >
-                          {t.visChassisBottomEdgeCallout.replace('{dist}', geometry.axleTopToChassisBottomMm.toFixed(2))}
-                        </text>
-                        <text
-                          x="8"
-                          y={geometry.gearTipRadius + 11}
-                          fill="#38bdf8"
-                          fontSize="9"
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
-                        >
-                          {t.visSpurOuterEdgeCallout.replace('{od}', geometry.spurOuterDiaMm.toFixed(2))}
-                        </text>
-                        <text
-                          x="8"
-                          y={geometry.groundDistancePx + 13}
-                          fill="#38bdf8"
-                          fontSize="9"
-                          fontWeight="bold"
-                          fontFamily="sans-serif"
-                        >
-                          {t.visRoadSurfaceCallout} (Ø {tireDiameterMm.toFixed(1)} mm)
-                        </text>
+                        <g transform={`translate(8, ${-geometry.axleVisualRadius - 19})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width="210"
+                            height="16"
+                            rx="4"
+                            fill="#090d16"
+                            fillOpacity="0.95"
+                            stroke="#34d399"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x="8"
+                            y="11"
+                            fill="#f8fafc"
+                            fontSize="8.5"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            {t.visAxleTopSurfaceCallout} (r = {geometry.axleRadiusMm.toFixed(2)} mm)
+                          </text>
+                        </g>
+                        <g transform={`translate(8, ${geometry.chassisBottomPx - 18})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width="244"
+                            height="17"
+                            rx="4"
+                            fill="#090d16"
+                            fillOpacity="0.97"
+                            stroke="#f59e0b"
+                            strokeWidth="1.2"
+                          />
+                          <text
+                            x="122"
+                            y="11.5"
+                            textAnchor="middle"
+                            fill="#fbbf24"
+                            fontSize="8.5"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            {t.visChassisBottomEdgeCallout.replace('{dist}', geometry.axleTopToChassisBottomMm.toFixed(2))}
+                          </text>
+                        </g>
+                        <g transform={`translate(8, ${geometry.gearTipRadius + 3})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width="224"
+                            height="16"
+                            rx="4"
+                            fill="#090d16"
+                            fillOpacity="0.95"
+                            stroke="#38bdf8"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x="8"
+                            y="11"
+                            fill="#38bdf8"
+                            fontSize="8.5"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            {t.visSpurOuterEdgeCallout.replace('{od}', geometry.spurOuterDiaMm.toFixed(2))}
+                          </text>
+                        </g>
+                        <g transform={`translate(8, ${geometry.groundDistancePx + 4})`}>
+                          <rect
+                            x="0"
+                            y="0"
+                            width="216"
+                            height="16"
+                            rx="4"
+                            fill="#090d16"
+                            fillOpacity="0.95"
+                            stroke="#38bdf8"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x="8"
+                            y="11"
+                            fill="#38bdf8"
+                            fontSize="8.5"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                          >
+                            {t.visRoadSurfaceCallout} (Ø {tireDiameterMm.toFixed(1)} mm)
+                          </text>
+                        </g>
                       </g>
                     )}
                   </g>
@@ -1736,24 +1726,29 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
             {/* Gear & Tire Label (hidden in close-up mesh/axle mode) */}
             {viewMode !== 'mesh' && viewMode !== 'axle' && (
               <>
-                <g transform={`translate(0, ${-Math.max(geometry.r2, geometry.wheelVisualRadius) - 24})`}>
+                <g
+                  transform={`translate(0, ${Math.max(
+                    -geometry.gearY + 22,
+                    -Math.max(geometry.r2, geometry.wheelVisualRadius) - 14
+                  )})`}
+                >
                   <rect
-                    x="-115"
-                    y="-18"
-                    width="230"
-                    height="26"
+                    x="-144"
+                    y="-15"
+                    width="288"
+                    height="24"
                     rx="6"
-                    fill="#0f172a"
+                    fill="#090d16"
                     stroke="#38bdf8"
-                    strokeWidth="1"
-                    opacity="0.9"
+                    strokeWidth="1.2"
+                    fillOpacity="0.96"
                   />
                   <text
                     x="0"
-                    y="-1"
+                    y="1"
                     textAnchor="middle"
                     fill="#38bdf8"
-                    fontSize="11"
+                    fontSize="10"
                     fontWeight="bold"
                     fontFamily="sans-serif"
                   >
@@ -1761,15 +1756,30 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                   </text>
                 </g>
 
-                <text
-                  x="0"
-                  y={Math.max(geometry.r2, geometry.wheelVisualRadius) + 26}
-                  textAnchor="middle"
-                  fill="#94a3b8"
-                  fontSize="11"
-                >
-                  {t.visWheelRevs.replace('{revs}', (totalWheelRevs % 1000).toFixed(2)).replace('{dia}', tireDiameterMm.toString())}
-                </text>
+                <g transform={`translate(-112, ${geometry.groundDistancePx + 36})`}>
+                  <rect
+                    x="-98"
+                    y="-11"
+                    width="196"
+                    height="20"
+                    rx="5"
+                    fill="#090d16"
+                    fillOpacity="0.96"
+                    stroke="#475569"
+                    strokeWidth="1.1"
+                  />
+                  <text
+                    x="0"
+                    y="3"
+                    textAnchor="middle"
+                    fill="#cbd5e1"
+                    fontSize="10"
+                    fontWeight="bold"
+                    fontFamily="monospace"
+                  >
+                    {t.visWheelRevs.replace('{revs}', (totalWheelRevs % 1000).toFixed(2)).replace('{dia}', tireDiameterMm.toString())}
+                  </text>
+                </g>
               </>
             )}
           </g>
@@ -1795,7 +1805,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
               const axleEdgeY = geometry.gearY + geometry.axleVisualRadius * sinA;
 
               const midGapX = (motorEdgeX + axleEdgeX) / 2;
-              const calY = Math.min(motorEdgeY, axleEdgeY) - (viewMode === 'axle' ? 36 : 44);
+              const calY = Math.min(motorEdgeY, axleEdgeY) - (viewMode === 'axle' ? 38 : 66);
 
               return (
                 <g className="motor-on-spur-foreground-overlay pointer-events-none">
@@ -1897,20 +1907,20 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                       />
 
                       {/* Motor ↔ Axle Gap Dimension Badge */}
-                      <g transform={`translate(${midGapX - 78}, ${calY - 46})`}>
+                      <g transform={`translate(${midGapX - 94}, ${calY - 46})`}>
                         <rect
                           x="0"
                           y="0"
-                          width="156"
+                          width="188"
                           height="36"
                           rx="6"
                           fill={gapBg}
                           stroke={gapColor}
                           strokeWidth="1.4"
-                          opacity="0.96"
+                          fillOpacity="0.97"
                         />
                         <text
-                          x="78"
+                          x="94"
                           y="15"
                           textAnchor="middle"
                           fill={gapText}
@@ -1924,11 +1934,11 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                           )}
                         </text>
                         <text
-                          x="78"
+                          x="94"
                           y="28"
                           textAnchor="middle"
                           fill="#94a3b8"
-                          fontSize="8"
+                          fontSize="8.5"
                           fontFamily="sans-serif"
                         >
                           {t.visMotorToAxleGapSub
@@ -2127,7 +2137,7 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                   <line
                     x1="0"
                     y1={-geometry.pinionTipRadius}
-                    x2="-20"
+                    x2="-26"
                     y2={-geometry.pinionTipRadius - 10}
                     stroke="#eab308"
                     strokeWidth="1.2"
@@ -2135,17 +2145,17 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                     opacity="0.85"
                   />
 
-                  <g transform={`translate(-28, ${-geometry.pinionTipRadius - 24})`}>
+                  <g transform={`translate(-36, ${-geometry.pinionTipRadius - 22})`}>
                     <rect
-                      x="-96"
+                      x="-100"
                       y="-34"
-                      width="192"
+                      width="200"
                       height="48"
                       rx="6"
-                      fill="#0f172a"
+                      fill="#090d16"
                       stroke="#eab308"
                       strokeWidth="1.3"
-                      opacity="0.97"
+                      fillOpacity="0.97"
                     />
                     <text
                       x="0"
@@ -2195,26 +2205,26 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
                     opacity="0.85"
                   />
 
-                  {/* Motor revolutions pill badge below Pinion */}
-                  <g transform={`translate(0, ${geometry.pinionTipRadius + 16})`}>
+                  {/* Motor revolutions pill badge below Pinion (moved lower beneath Mesh clearance badge) */}
+                  <g transform={`translate(0, ${geometry.pinionTipRadius + 44})`}>
                     <rect
-                      x="-58"
-                      y="-11"
-                      width="116"
-                      height="18"
+                      x="-82"
+                      y="-10"
+                      width="164"
+                      height="19"
                       rx="4"
-                      fill="#0f172a"
+                      fill="#090d16"
                       stroke="#eab308"
-                      strokeWidth="0.9"
-                      opacity="0.94"
+                      strokeWidth="1.1"
+                      fillOpacity="0.97"
                     />
                     <text
                       x="0"
-                      y="2"
+                      y="3"
                       textAnchor="middle"
                       fill="#fef08a"
-                      fontSize="10"
-                      fontWeight="600"
+                      fontSize="9.5"
+                      fontWeight="bold"
                       fontFamily="monospace"
                     >
                       {t.visMotorRevs.replace('{revs}', (totalMotorRevs % 1000).toFixed(2))}
@@ -2225,35 +2235,52 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
             </g>
           )}
 
-          {/* Foreground Layer 3: Meshing contact callout (on top of both gears) */}
+          {/* Foreground Layer 3: Meshing contact callout (on top of both gears, with Mesh clearance badge directly below Pinion) */}
           {(viewMode === 'combined' || viewMode === 'gears' || viewMode === 'mesh') && (
             <g transform={`translate(${geometry.meshX}, ${geometry.meshY})`}>
               <circle r={viewMode === 'mesh' ? 1.6 : 4} fill="#ef4444" className="animate-ping" opacity="0.7" />
               <circle r={viewMode === 'mesh' ? 1.2 : 3} fill="#ef4444" />
               {viewMode !== 'mesh' ? (
-                <g transform="translate(0, 17)">
-                  <rect
-                    x="-62"
-                    y="-10"
-                    width="124"
-                    height="15"
-                    rx="3.5"
-                    fill="#0f172a"
+                <g>
+                  {/* Subtle leader line from red mesh contact point down to Mesh clearance badge below Pinion */}
+                  <line
+                    x1="0"
+                    y1="3"
+                    x2={geometry.pinionX - geometry.meshX + 14}
+                    y2={geometry.pinionY + geometry.pinionTipRadius + 10 - geometry.meshY}
                     stroke="#ef4444"
-                    strokeWidth="0.9"
-                    opacity="0.94"
+                    strokeWidth="1.1"
+                    strokeDasharray="2.5 2"
+                    opacity="0.85"
                   />
-                  <text
-                    x="0"
-                    y="1"
-                    textAnchor="middle"
-                    fill="#fca5a5"
-                    fontSize="8.5"
-                    fontWeight="bold"
-                    fontFamily="monospace"
+                  <g
+                    transform={`translate(${geometry.pinionX - geometry.meshX}, ${
+                      geometry.pinionY + geometry.pinionTipRadius + 20 - geometry.meshY
+                    })`}
                   >
-                    {t.visMeshPoint.replace('{mesh}', geometry.meshClearanceMm.toFixed(2))}
-                  </text>
+                    <rect
+                      x="-82"
+                      y="-10"
+                      width="164"
+                      height="19"
+                      rx="4"
+                      fill="#090d16"
+                      stroke="#ef4444"
+                      strokeWidth="1.1"
+                      fillOpacity="0.97"
+                    />
+                    <text
+                      x="0"
+                      y="2.5"
+                      textAnchor="middle"
+                      fill="#fca5a5"
+                      fontSize="8.5"
+                      fontWeight="bold"
+                      fontFamily="monospace"
+                    >
+                      {t.visMeshPoint.replace('{mesh}', geometry.meshClearanceMm.toFixed(2))}
+                    </text>
+                  </g>
                 </g>
               ) : (
                 <g>
@@ -2318,6 +2345,227 @@ export const GearVisualizer: React.FC<GearVisualizerProps> = ({
               )}
             </g>
           )}
+
+          {/* Topmost Foreground Layer: Left-Side Stacked CHASSIS & MOTOR CLEARANCE Badges + Motor Top Label - ALWAYS ON TOP (PÄÄLLIMMÄISENÄ) */}
+          {(viewMode === 'combined' || viewMode === 'gears' || viewMode === 'wheel') &&
+            (() => {
+              const chassisLeftX = 25;
+              const stackLeftX = 12;
+              const stackWidth = 158;
+              const stackCenterX = stackLeftX + stackWidth / 2;
+
+              // Stack Chassis badge (top) and Motor Clearance badge (directly below it, päällekkäin/allekkain) on the left
+              const chassisBadgeTopY = Math.min(
+                geometry.chassisBottomY - 46,
+                geometry.roadY - 72
+              );
+              const chassisBadgeCenterY = chassisBadgeTopY + 11;
+              const motorBadgeTopY = chassisBadgeTopY + 26;
+              const motorBadgeCenterY = motorBadgeTopY + 18;
+
+              return (
+                <g className="chassis-topmost-foreground-layer pointer-events-none">
+                  {/* Highlighted Chassis Bottom Surface Line from front left to spur gear */}
+                  <line
+                    x1={chassisLeftX}
+                    y1={geometry.chassisBottomY}
+                    x2={geometry.gearX + geometry.gearTipRadius + 32}
+                    y2={geometry.chassisBottomY}
+                    stroke="#f59e0b"
+                    strokeWidth="2.4"
+                    strokeDasharray="6 3"
+                    opacity="0.95"
+                  />
+
+                  {/* Motor Top Diameter Label Badge (on top of Spur Gear and Motor contour) */}
+                  {(viewMode === 'combined' || viewMode === 'gears') && (
+                    <g
+                      transform={`translate(${geometry.pinionX - 28}, ${Math.max(
+                        20,
+                        geometry.pinionY - geometry.motorVisualRadius - 14
+                      )})`}
+                    >
+                      <rect
+                        x="-72"
+                        y="-12"
+                        width="144"
+                        height="22"
+                        rx="5"
+                        fill="#090d16"
+                        fillOpacity="0.98"
+                        stroke="#8b5cf6"
+                        strokeWidth="1.4"
+                        className="filter drop-shadow-md"
+                      />
+                      <text
+                        x="0"
+                        y="3"
+                        textAnchor="middle"
+                        fill="#c4b5fd"
+                        fontSize="10"
+                        fontWeight="bold"
+                        fontFamily="monospace"
+                      >
+                        {t.visMotorCanLabel.replace('{dia}', motorDiameterMm.toFixed(1))}
+                      </text>
+                    </g>
+                  )}
+
+                  {/* Optional Motor Offset Badge (stacked above Chassis badge in the left column when offset > 0) */}
+                  {(viewMode === 'combined' || viewMode === 'gears') &&
+                    geometry.clampedOffsetMm > 0.001 && (
+                      <g
+                        transform={`translate(${stackLeftX}, ${Math.min(
+                          chassisBadgeTopY - 28,
+                          geometry.pinionY - geometry.offsetPx / 2 - 11
+                        )})`}
+                      >
+                        <rect
+                          x="0"
+                          y="0"
+                          width={stackWidth}
+                          height="22"
+                          rx="5"
+                          fill="#090d16"
+                          fillOpacity="0.98"
+                          stroke="#e879f9"
+                          strokeWidth="1.4"
+                          className="filter drop-shadow-md"
+                        />
+                        <text
+                          x={stackWidth / 2}
+                          y="14.5"
+                          textAnchor="middle"
+                          fill="#f5d0fe"
+                          fontSize="9"
+                          fontWeight="bold"
+                          fontFamily="monospace"
+                        >
+                          Offset: -{geometry.clampedOffsetMm.toFixed(2)} mm
+                        </text>
+                      </g>
+                    )}
+
+                  {/* Leader line from Chassis badge down to Chassis Bottom Surface line */}
+                  <line
+                    x1={stackCenterX}
+                    y1={chassisBadgeTopY + 22}
+                    x2={stackCenterX}
+                    y2={geometry.chassisBottomY}
+                    stroke="#f59e0b"
+                    strokeWidth="1.3"
+                    strokeDasharray="2 2"
+                    opacity="0.85"
+                  />
+                  <circle cx={stackCenterX} cy={geometry.chassisBottomY} r="2.8" fill="#f59e0b" />
+
+                  {/* 1. TOP STACKED BADGE ON LEFT: Chassis Label Badge */}
+                  <g transform={`translate(${stackLeftX}, ${chassisBadgeTopY})`}>
+                    <rect
+                      x="0"
+                      y="0"
+                      width={stackWidth}
+                      height="22"
+                      rx="5"
+                      fill="#090d16"
+                      fillOpacity="0.98"
+                      stroke="#f59e0b"
+                      strokeWidth="1.5"
+                      className="filter drop-shadow-md"
+                    />
+                    <text
+                      x={stackWidth / 2}
+                      y="14.5"
+                      textAnchor="middle"
+                      fill="#fde68a"
+                      fontSize="9.5"
+                      fontWeight="bold"
+                      fontFamily="monospace"
+                    >
+                      {t.visChassisLabel.replace('{dist}', geometry.axleTopToChassisBottomMm.toFixed(2))}
+                    </text>
+                  </g>
+
+                  {/* 2. BOTTOM STACKED BADGE ON LEFT (directly below Chassis badge): Motor Ground Clearance Badge */}
+                  {(viewMode === 'combined' || viewMode === 'gears') &&
+                    (() => {
+                      const isLowMotorClearance = geometry.motorGroundClearanceMm <= 0.2;
+                      const mColor = isLowMotorClearance ? '#f43f5e' : '#a78bfa';
+                      const mBg = isLowMotorClearance ? '#4c0519' : '#090d16';
+                      const mText = isLowMotorClearance ? '#fda4af' : '#ddd6fe';
+                      const mSign = geometry.motorGroundClearanceMm >= 0 ? '+' : '';
+                      const calGlobalX = geometry.pinionX - geometry.motorVisualRadius - 18;
+                      const roadLocalY = geometry.roadY - geometry.pinionY;
+                      const clearGlobalY =
+                        geometry.pinionY + (geometry.motorVisualRadius + roadLocalY) / 2;
+
+                      return (
+                        <g>
+                          {/* Connector line from Motor Clearance badge right edge to Motor Clearance caliper */}
+                          <line
+                            x1={stackLeftX + stackWidth}
+                            y1={motorBadgeCenterY}
+                            x2={calGlobalX}
+                            y2={clearGlobalY}
+                            stroke={mColor}
+                            strokeWidth="1.4"
+                            strokeDasharray="3 2"
+                          />
+                          <g transform={`translate(${stackLeftX}, ${motorBadgeTopY})`}>
+                            <rect
+                              x="0"
+                              y="0"
+                              width={stackWidth}
+                              height="36"
+                              rx="6"
+                              fill={mBg}
+                              stroke={mColor}
+                              strokeWidth="1.5"
+                              fillOpacity="0.98"
+                              className="filter drop-shadow-md"
+                            />
+                            <text
+                              x={stackWidth / 2}
+                              y="14"
+                              textAnchor="middle"
+                              fill={mText}
+                              fontSize="9.2"
+                              fontWeight="bold"
+                              fontFamily="monospace"
+                            >
+                              {t.visMotorClearanceCallout.replace(
+                                '{clearance}',
+                                `${mSign}${geometry.motorGroundClearanceMm.toFixed(2)}`
+                              )}
+                            </text>
+                            <text
+                              x={stackWidth / 2}
+                              y="28"
+                              textAnchor="middle"
+                              fill="#94a3b8"
+                              fontSize="8.5"
+                              fontFamily="sans-serif"
+                            >
+                              {lockAxleHeight86
+                                ? t.visMotorClearanceLockedSub
+                                    .replace('{val}', lockedChassisMm.toFixed(1))
+                                    .replace('{motor}', motorDiameterMm.toFixed(1))
+                                : geometry.clampedOffsetMm > 0.001
+                                ? t.visMotorClearanceSubOffset
+                                    .replace('{tire}', tireDiameterMm.toFixed(1))
+                                    .replace('{motor}', motorDiameterMm.toFixed(1))
+                                    .replace('{offset}', geometry.clampedOffsetMm.toFixed(1))
+                                : t.visMotorClearanceSub
+                                    .replace('{tire}', tireDiameterMm.toFixed(1))
+                                    .replace('{motor}', motorDiameterMm.toFixed(1))}
+                            </text>
+                          </g>
+                        </g>
+                      );
+                    })()}
+                </g>
+              );
+            })()}
 
           {/* Interactive Drag Instruction Hint */}
           {viewMode !== 'mesh' && viewMode !== 'axle' && (

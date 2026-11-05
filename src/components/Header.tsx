@@ -53,6 +53,16 @@ export const Header: React.FC<HeaderProps> = ({
           {t.navSimulator}
         </button>
         <button
+          onClick={() => onSelectSection('model-3d')}
+          className={`whitespace-nowrap shrink-0 transition-colors ${
+            activeSection === 'model-3d'
+              ? 'text-amber-500 font-semibold'
+              : 'hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          {t.navModel3D}
+        </button>
+        <button
           onClick={() => onSelectSection('tire-impact')}
           className={`whitespace-nowrap shrink-0 transition-colors ${
             activeSection === 'tire-impact'

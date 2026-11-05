@@ -29,8 +29,8 @@ export const GearControls: React.FC<GearControlsProps> = ({
   const currentAxle: AxleSize = setup.axleSize ?? '3/32';
   const lockAxleHeight86: boolean = setup.lockAxleHeight86 ?? true;
   const lockedChassisMm: number = setup.lockedChassisMm ?? 8.6;
-  // 2.0 mm for 64p, 1.5 mm for 72p and 80p
-  const currentPinionShaftDiaMm = currentPitch === 64 ? 2.0 : 1.5;
+  // Pinion shaft diameter: 2.0 mm for 64p, 1.5 mm or 2.0 mm for 72p, 1.5 mm for 80p
+  const currentPinionShaftDiaMm = setup.pinionShaftDiaMm ?? (currentPitch === 64 ? 2.0 : 1.5);
 
   // Physical module & Pinion/Spur outer diameters (Pinion includes +0.2 mm diameter offset; Spur uses exact 64P table for 64P)
   const moduleMm = 25.4 / currentPitch;
@@ -100,10 +100,12 @@ export const GearControls: React.FC<GearControlsProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {PRESETS.filter((p) => p.isFromUserCsv).map((preset) => {
+              const presetPitch = preset.pitch ?? (preset.id === 'user-csv-1' ? 72 : 64);
               const isSelected =
                 pinionTeeth === preset.pinionTeeth &&
                 gearTeeth === preset.gearTeeth &&
-                tireDiameterMm === preset.tireDiameterMm;
+                tireDiameterMm === preset.tireDiameterMm &&
+                currentPitch === presetPitch;
 
               const title = preset.id === 'user-csv-1' ? t.controlsCsvCol1 : t.controlsCsvCol3;
 
@@ -117,11 +119,20 @@ export const GearControls: React.FC<GearControlsProps> = ({
                       : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-amber-400'
                   }`}
                 >
-                  <div className="font-semibold truncate">
-                    {title}
+                  <div className="font-semibold truncate flex items-center justify-between gap-1.5">
+                    <span>{title}</span>
+                    <span
+                      className={`font-mono text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                        isSelected
+                          ? 'bg-slate-950/15 text-slate-950'
+                          : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      }`}
+                    >
+                      {presetPitch}p
+                    </span>
                   </div>
-                  <div className="text-[11px] opacity-80 tabular-nums">
-                    {preset.pinionTeeth}T / {preset.gearTeeth}T · {preset.tireDiameterMm} mm
+                  <div className="text-[11px] opacity-80 tabular-nums font-mono mt-0.5">
+                    {preset.pinionTeeth}T / {preset.gearTeeth}T · {presetPitch}p · {preset.tireDiameterMm} mm
                   </div>
                 </button>
               );
@@ -150,7 +161,12 @@ export const GearControls: React.FC<GearControlsProps> = ({
               return (
                 <button
                   key={p}
-                  onClick={() => onChange({ pitch: p, pinionShaftDiaMm: p === 64 ? 2.0 : 1.5 })}
+                  onClick={() =>
+                    onChange({
+                      pitch: p,
+                      pinionShaftDiaMm: p === 64 ? 2.0 : p === 72 ? currentPinionShaftDiaMm : 1.5,
+                    })
+                  }
                   className={`py-1.5 px-2.5 rounded-lg text-center transition-all border ${
                     isSelected
                       ? 'bg-amber-500 text-slate-950 font-bold border-amber-500 shadow-xs'
@@ -159,7 +175,9 @@ export const GearControls: React.FC<GearControlsProps> = ({
                 >
                   <div className="text-xs font-extrabold font-mono flex items-center justify-center gap-1">
                     <span>{p}P</span>
-                    <span className="text-[9px] font-normal opacity-85">({p === 64 ? '2.0mm' : '1.5mm'})</span>
+                    <span className="text-[9px] font-normal opacity-85">
+                      ({p === 64 ? '2.0mm' : p === 72 ? `${currentPinionShaftDiaMm.toFixed(1)}mm` : '1.5mm'})
+                    </span>
                   </div>
                   <div className="text-[10px] opacity-80 font-mono">
                     Ø {pinionDia}/{spurDia}mm
@@ -168,6 +186,35 @@ export const GearControls: React.FC<GearControlsProps> = ({
               );
             })}
           </div>
+
+          {/* 72P Pinion Shaft / Hole selection: 1.5 mm vs 2.0 mm */}
+          {currentPitch === 72 && (
+            <div className="mt-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                {t.controlsPitch72ShaftChoice}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {([1.5, 2.0] as const).map((dia) => {
+                  const isShaftSelected = currentPinionShaftDiaMm === dia;
+                  return (
+                    <button
+                      key={dia}
+                      type="button"
+                      onClick={() => onChange({ pinionShaftDiaMm: dia })}
+                      className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold transition-all border ${
+                        isShaftSelected
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-amber-400'
+                      }`}
+                    >
+                      Ø {dia.toFixed(1)} mm {dia === 2.0 ? '(2mm)' : '(1.5mm)'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <p className="text-[10px] text-slate-500 dark:text-slate-400">
             {t.controlsPitchDesc}
           </p>
@@ -564,6 +611,48 @@ export const GearControls: React.FC<GearControlsProps> = ({
               {t.controlsPinionTeeth.replace('{count}', pinionTeeth.toString())} (Ø {pinionOuterDiaMm.toFixed(2)} mm)
             </span>
             <span>15T</span>
+          </div>
+
+          {/* Pinion shaft/bore selector (1.5mm vs 2.0mm) */}
+          <div className="p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-500/5 border border-amber-500/20 space-y-1.5 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {t.controlsPinionShaftSelectLabel}
+              </span>
+              <div className="flex items-center gap-1.5">
+                {([1.5, 2.0] as const).map((dia) => {
+                  const isShaftActive = currentPinionShaftDiaMm === dia;
+                  return (
+                    <button
+                      key={dia}
+                      type="button"
+                      onClick={() => onChange({ pinionShaftDiaMm: dia })}
+                      className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all border ${
+                        isShaftActive
+                          ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-xs'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-amber-400'
+                      }`}
+                    >
+                      Ø {dia.toFixed(1)} mm
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+              {currentPitch === 72
+                ? currentPinionShaftDiaMm === 2.0
+                  ? t.controlsPinionShaft72pTip20
+                  : t.controlsPinionShaft72pTip15
+                : currentPitch === 64
+                ? t.controlsPinionShaft64pTip
+                : t.controlsPinionShaft80pTip}
+            </div>
+            {currentPitch === 72 && currentPinionShaftDiaMm === 2.0 && pinionTeeth < 7 && (
+              <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">
+                {t.controlsPinionShaftMinTeethTip}
+              </div>
+            )}
           </div>
         </div>
 
